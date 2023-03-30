@@ -15,8 +15,7 @@ pub struct ValueUnit {
 
 impl ops::Add<&ValueUnit> for &ValueUnit {
     fn add(self, other: &ValueUnit) -> ValueUnit {
-        assert_eq!(self.units, other.units, "{} does not equal {}", self.units_to_string(), other.units_to_string());
-        return ValueUnit { value: self.value + other.value, units: self.units.clone() }
+        return self.try_add(other).unwrap();
     }
 
     type Output = ValueUnit;
@@ -31,8 +30,7 @@ impl ops::AddAssign<&ValueUnit> for ValueUnit {
 
 impl ops::Sub<&ValueUnit> for &ValueUnit {
     fn sub(self, other: &ValueUnit) -> ValueUnit {
-        assert_eq!(self.units, other.units, "{} does not equal {}", self.units_to_string(), other.units_to_string());
-        return ValueUnit { value: self.value - other.value, units: self.units.clone() }
+        return self.try_sub(other).unwrap();
     }
 
     type Output = ValueUnit;
@@ -118,6 +116,43 @@ impl ValueUnit {
             return (k.clone(), v / root);
         })) }
     }
+}
+
+trait TryAdd<Tright> {
+    type OkOutput;
+    fn try_add(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
+}
+trait TrySub<Tright> {
+    type OkOutput;
+    fn try_sub(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
+}
+trait TryMul<Tright> {
+    type OkOutput;
+    fn try_mul(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
+}
+trait TryDiv<Tright> {
+    type OkOutput;
+    fn try_div(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
+}
+
+impl TryAdd<&ValueUnit> for &ValueUnit {
+    fn try_add(self, right: &ValueUnit) -> Result<Self::OkOutput, &'static str> {
+        if self.units != right.units {
+            return Err("Units don't match");
+        }
+        return Ok(ValueUnit { value: self.value + right.value, units: self.units.clone() });
+    }
+    type OkOutput = ValueUnit;
+}
+
+impl TrySub<&ValueUnit> for &ValueUnit {
+    fn try_sub(self, right: &ValueUnit) -> Result<Self::OkOutput, &'static str> {
+        if self.units != right.units {
+            return Err("Units don't match");
+        }
+        return Ok(ValueUnit { value: self.value - right.value, units: self.units.clone() });
+    }
+    type OkOutput = ValueUnit;
 }
 
 impl TryFrom<String> for ValueUnit {
@@ -221,5 +256,27 @@ mod tests {
         assert_eq!(result, Err("Not a valid value"));
         let result: Result<ValueUnit, &str> = "10 kg m^x s^-2".to_string().try_into();
         assert_eq!(result, Err("Not a valid power"));
+    }
+    #[test]
+    fn try_add() {
+        let a = ValueUnit!(1.0 kg);
+        let b = ValueUnit!(1.0 banana);
+        let result: Result<ValueUnit, &str> = (&a).try_add(&b);
+        assert_eq!(result, Err("Units don't match"));
+        let a = ValueUnit!(1.0 kg);
+        let b = ValueUnit!(1.0 kg);
+        let result: Result<ValueUnit, &str> = (&a).try_add(&b);
+        assert_eq!(result, Ok(ValueUnit!(2.0 kg)));
+    }
+    #[test]
+    fn try_sub() {
+        let a = ValueUnit!(2.0 kg);
+        let b = ValueUnit!(1.0 banana);
+        let result: Result<ValueUnit, &str> = (&a).try_sub(&b);
+        assert_eq!(result, Err("Units don't match"));
+        let a = ValueUnit!(2.0 kg);
+        let b = ValueUnit!(1.0 kg);
+        let result: Result<ValueUnit, &str> = (&a).try_sub(&b);
+        assert_eq!(result, Ok(ValueUnit!(1.0 kg)));
     }
 }
