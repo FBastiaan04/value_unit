@@ -118,21 +118,13 @@ impl ValueUnit {
     }
 }
 
-trait TryAdd<Tright> {
+pub trait TryAdd<Tright> {
     type OkOutput;
     fn try_add(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
 }
-trait TrySub<Tright> {
+pub trait TrySub<Tright> {
     type OkOutput;
     fn try_sub(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
-}
-trait TryMul<Tright> {
-    type OkOutput;
-    fn try_mul(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
-}
-trait TryDiv<Tright> {
-    type OkOutput;
-    fn try_div(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
 }
 
 impl TryAdd<&ValueUnit> for &ValueUnit {
