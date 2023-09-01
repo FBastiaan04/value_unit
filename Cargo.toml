@@ -2,7 +2,7 @@
 name = "value_unit"
 version = "0.1.1"
 edition = "2021"
-description = "A crate for every unit. Also contains a handy macro"
+description = "A crate for every unit imaginable. Also contains a handy macro"
 license = "Apache-2.0 OR MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
