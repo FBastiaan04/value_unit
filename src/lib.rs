@@ -1,4 +1,16 @@
 use std::{collections::HashMap, ops};
+use phf::{phf_map};
+
+static DERIVED_UNITS: phf::Map<&'static str, &'static [(&'static str, i8)]> = phf_map! {
+    "Hz" => &[("s", -1)],
+    "N" => &[("m", 1), ("kg", 1), ("s", -2)],
+    "Pa" => &[("m", -1), ("kg", 1), ("s", -2)],
+    "J" => &[("m", 2), ("kg", 1), ("s", -2)],
+    "W" => &[("m", 2), ("kg", 1), ("s", -3)],
+    "V" => &[("m", 2), ("kg", 1), ("s", -3), ("A", -1)],
+    "Ohm" => &[("m", 2), ("kg", 1), ("s", -3), ("A", -2)],
+    "T" => &[("kg", 1), ("s", -2), ("A", -1)]
+};
 
 #[macro_export]
 macro_rules! ValueUnit {
@@ -88,9 +100,30 @@ impl ops::Div<&ValueUnit> for &ValueUnit {
 
 impl ValueUnit {
     pub fn new(value: f64, units: HashMap<String, i8>) -> Self {
-        Self { value, units }
+        let mut res_units = units.clone();
+        for (unit, power) in units {
+            if DERIVED_UNITS.contains_key(&unit) {
+                // if this unit is derived, replace it with it's base units
+                let tmp = DERIVED_UNITS.get(&unit).unwrap().clone();
+                for (key, value) in tmp {
+                    if let Some(existing_value) = res_units.get_mut(&key.to_string()) {
+                        *existing_value += value * power;
+                    } else {
+                        res_units.insert(key.to_string(), value * power);
+                    }
+                }
+                res_units.remove(&unit);
+            }
+        }
+        res_units.retain(|_, v| *v != 0);
+        Self { value, units: res_units }
     }
     fn units_to_string(&self) -> String {
+        for (base, derrived) in DERIVED_UNITS.entries() {
+            if HashMap::from_iter(derrived.iter().map(|(k, v)| (k.to_string(), *v))) == self.units {
+                return base.to_string();
+            }
+        }
         return self.units.iter().fold("".to_string(), |acc, (k, v)| {
             if acc == "".to_string() {
                 if *v == 1 {
@@ -169,7 +202,7 @@ impl TryFrom<String> for ValueUnit {
                 return Ok((unit_and_power.to_string(), 1));
             }
         }).collect::<Result<HashMap<String, i8>, &'static str>>()?;
-        Ok(ValueUnit { value, units })
+        Ok(ValueUnit::new(value, units))
     }
 
     type Error = &'static str;
