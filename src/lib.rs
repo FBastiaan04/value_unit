@@ -1,5 +1,5 @@
 use std::{collections::HashMap, ops};
-use phf::{phf_map};
+use phf::phf_map;
 
 static DERIVED_UNITS: phf::Map<&'static str, &'static [(&'static str, i8)]> = phf_map! {
     "Hz" => &[("s", -1)],
@@ -104,7 +104,7 @@ impl ValueUnit {
         for (unit, power) in units {
             if DERIVED_UNITS.contains_key(&unit) {
                 // if this unit is derived, replace it with it's base units
-                let tmp = DERIVED_UNITS.get(&unit).unwrap().clone();
+                let tmp = *DERIVED_UNITS.get(&unit).unwrap();
                 for (key, value) in tmp {
                     if let Some(existing_value) = res_units.get_mut(&key.to_string()) {
                         *existing_value += value * power;
@@ -153,17 +153,17 @@ impl ValueUnit {
 
 pub trait TryAdd<Tright> {
     type OkOutput;
-    fn try_add(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
+    fn try_add(self, right: Tright) -> Result<Self::OkOutput, String>;
 }
 pub trait TrySub<Tright> {
     type OkOutput;
-    fn try_sub(self, right: Tright) -> Result<Self::OkOutput, &'static str>;
+    fn try_sub(self, right: Tright) -> Result<Self::OkOutput, String>;
 }
 
 impl TryAdd<&ValueUnit> for &ValueUnit {
-    fn try_add(self, right: &ValueUnit) -> Result<Self::OkOutput, &'static str> {
+    fn try_add(self, right: &ValueUnit) -> Result<Self::OkOutput, String> {
         if self.units != right.units {
-            return Err("Units don't match");
+            return Err(format!("Units {} and {} don't match", self.units_to_string(), right.units_to_string()));
         }
         return Ok(ValueUnit { value: self.value + right.value, units: self.units.clone() });
     }
@@ -171,9 +171,9 @@ impl TryAdd<&ValueUnit> for &ValueUnit {
 }
 
 impl TrySub<&ValueUnit> for &ValueUnit {
-    fn try_sub(self, right: &ValueUnit) -> Result<Self::OkOutput, &'static str> {
+    fn try_sub(self, right: &ValueUnit) -> Result<Self::OkOutput, String> {
         if self.units != right.units {
-            return Err("Units don't match");
+            return Err(format!("Units {} and {} don't match", self.units_to_string(), right.units_to_string()));
         }
         return Ok(ValueUnit { value: self.value - right.value, units: self.units.clone() });
     }
@@ -186,7 +186,7 @@ impl TryFrom<String> for ValueUnit {
         let value_str = constructor_iter.next().unwrap();
         let value = match value_str.parse() {
             Ok(value) => value,
-            Err(_) => return Err("Not a valid value")
+            Err(_) => return Err(format!("\"{}\" is not a valid value", value_str))
         };
         let units: HashMap<String, i8> = constructor_iter.map(|unit_and_power| {
             if unit_and_power.contains('^') {
@@ -195,17 +195,17 @@ impl TryFrom<String> for ValueUnit {
                 let power_str = unit_and_power_iter.next().unwrap();
                 let power = match power_str.parse() {
                     Ok(poweri8) => poweri8,
-                    Err(_) => return Err("Not a valid power")
+                    Err(_) => return Err(format!("\"{}\" is not a valid power", power_str))
                 };
                 return Ok((unit.to_string(), power))
             } else {
                 return Ok((unit_and_power.to_string(), 1));
             }
-        }).collect::<Result<HashMap<String, i8>, &'static str>>()?;
+        }).collect::<Result<HashMap<String, i8>, String>>()?;
         Ok(ValueUnit::new(value, units))
     }
 
-    type Error = &'static str;
+    type Error = String;
 }
 
 impl std::fmt::Display for ValueUnit {
@@ -273,35 +273,35 @@ mod tests {
     }
     #[test]
     fn from_string() {
-        let result: Result<ValueUnit, &str> = ValueUnit::try_from("10 kg ".to_string());
+        let result: Result<ValueUnit, String> = ValueUnit::try_from("10 kg ".to_string());
         assert_eq!(result, Ok(ValueUnit!(10.0 kg)));
-        let result: Result<ValueUnit, &str> = "10 kg m^3 s^-2 ".to_string().try_into();
+        let result: Result<ValueUnit, String> = "10 kg m^3 s^-2 ".to_string().try_into();
         assert_eq!(result, Ok(ValueUnit!(10.0 kg m^3 s^-2)));
-        let result: Result<ValueUnit, &str> = "x kg m^3 s^-2".to_string().try_into();
-        assert_eq!(result, Err("Not a valid value"));
-        let result: Result<ValueUnit, &str> = "10 kg m^x s^-2".to_string().try_into();
-        assert_eq!(result, Err("Not a valid power"));
+        let result: Result<ValueUnit, String> = "x kg m^3 s^-2".to_string().try_into();
+        assert_eq!(result, Err("\"x\" is not a valid value".to_string()));
+        let result: Result<ValueUnit, String> = "10 kg m^x s^-2".to_string().try_into();
+        assert_eq!(result, Err("\"x\" is not a valid power".to_string()));
     }
     #[test]
     fn try_add() {
         let a = ValueUnit!(1.0 kg);
         let b = ValueUnit!(1.0 banana);
-        let result: Result<ValueUnit, &str> = (&a).try_add(&b);
-        assert_eq!(result, Err("Units don't match"));
+        let result: Result<ValueUnit, String> = (&a).try_add(&b);
+        assert_eq!(result, Err(format!("Units {} and {} don't match", a.units_to_string(), b.units_to_string())));
         let a = ValueUnit!(1.0 kg);
         let b = ValueUnit!(1.0 kg);
-        let result: Result<ValueUnit, &str> = (&a).try_add(&b);
+        let result: Result<ValueUnit, String> = (&a).try_add(&b);
         assert_eq!(result, Ok(ValueUnit!(2.0 kg)));
     }
     #[test]
     fn try_sub() {
         let a = ValueUnit!(2.0 kg);
         let b = ValueUnit!(1.0 banana);
-        let result: Result<ValueUnit, &str> = (&a).try_sub(&b);
-        assert_eq!(result, Err("Units don't match"));
+        let result: Result<ValueUnit, String> = (&a).try_sub(&b);
+        assert_eq!(result, Err(format!("Units {} and {} don't match", a.units_to_string(), b.units_to_string())));
         let a = ValueUnit!(2.0 kg);
         let b = ValueUnit!(1.0 kg);
-        let result: Result<ValueUnit, &str> = (&a).try_sub(&b);
+        let result: Result<ValueUnit, String> = (&a).try_sub(&b);
         assert_eq!(result, Ok(ValueUnit!(1.0 kg)));
     }
 }
