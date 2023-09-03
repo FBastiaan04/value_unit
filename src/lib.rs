@@ -1,3 +1,6 @@
+//! Using this crate I also created a handy cli calculator that can process units and store variables<br/>
+//! See <https://github.com/FBastiaan04/unit_calc/>
+
 use std::{collections::HashMap, ops};
 use phf::phf_map;
 
@@ -12,13 +15,39 @@ static DERIVED_UNITS: phf::Map<&'static str, &'static [(&'static str, i8)]> = ph
     "T" => &[("kg", 1), ("s", -2), ("A", -1)]
 };
 
+/// Allways use this macro to create a ValueUnit<br/>
+/// Use in the following way:
+/// ```
+/// use value_unit::*;
+/// let g = ValueUnit!(9.81 m s^-2);
+/// let t = ValueUnit!(100 s);
+/// assert_eq!(g * t, ValueUnit!(981 m s^-1));
+/// ```
+/// Units can be anything:
+/// ```
+/// use value_unit::*;
+/// let price = ValueUnit!(10.99 euro pizza^-1);
+/// let amount = ValueUnit!(100 pizza);
+/// assert_eq!(price * amount, ValueUnit!(1099 euro));
+/// ```
 #[macro_export]
 macro_rules! ValueUnit {
     ($value:literal $($unit:ident$(^$power:literal)?)*) => {
-        ValueUnit::new($value, std::collections::HashMap::from([$((stringify!($unit).to_string(), 1 $(-1+$power)?),)*]))
+        ValueUnit::new($value as f64, std::collections::HashMap::from([$((stringify!($unit).to_string(), 1 $(-1+$power)?),)*]))
     }
 }
 
+/// Allways use the ValueUnit macro to create this struct.<br/>
+/// This struct implements all basic arithmatic methods and a power method.<br/>
+/// It should be noted however that add, subtract, addassign and subassign will panic if the units are not identical.<br/>
+/// Use try_add and try_sub if you want a Result.<br/>
+/// root will also panic if not all units have a power which is a multiple of the power.
+/// ```
+/// use value_unit::*;
+/// let d = ValueUnit!(10 m);
+/// let t = ValueUnit!(5 s);
+/// assert_eq!(d.try_add(&t), Err("Units m and s don't match".to_string()));
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValueUnit {
     pub value: f64,
@@ -33,8 +62,23 @@ impl ops::Add<&ValueUnit> for &ValueUnit {
     type Output = ValueUnit;
 }
 
+impl ops::Add<ValueUnit> for ValueUnit {
+    fn add(self, other: ValueUnit) -> ValueUnit {
+        return self.try_add(&other).unwrap();
+    }
+
+    type Output = ValueUnit;
+}
+
 impl ops::AddAssign<&ValueUnit> for ValueUnit {
     fn add_assign(&mut self, other: &ValueUnit) {
+        assert_eq!(self.units, other.units, "{} does not equal {}", self.units_to_string(), other.units_to_string());
+        self.value += other.value;
+    }
+}
+
+impl ops::AddAssign<ValueUnit> for ValueUnit {
+    fn add_assign(&mut self, other: ValueUnit) {
         assert_eq!(self.units, other.units, "{} does not equal {}", self.units_to_string(), other.units_to_string());
         self.value += other.value;
     }
@@ -48,7 +92,23 @@ impl ops::Sub<&ValueUnit> for &ValueUnit {
     type Output = ValueUnit;
 }
 
+impl ops::Sub<ValueUnit> for ValueUnit {
+    fn sub(self, other: ValueUnit) -> ValueUnit {
+        return self.try_sub(&other).unwrap();
+    }
+
+    type Output = ValueUnit;
+}
+
 impl ops::Mul<f64> for &ValueUnit {
+    fn mul(self, other: f64) -> ValueUnit {
+        return ValueUnit { value: self.value * other, units: self.units.clone() }
+    }
+
+    type Output = ValueUnit;
+}
+
+impl ops::Mul<f64> for ValueUnit {
     fn mul(self, other: f64) -> ValueUnit {
         return ValueUnit { value: self.value * other, units: self.units.clone() }
     }
@@ -73,7 +133,32 @@ impl ops::Mul<&ValueUnit> for &ValueUnit {
     type Output = ValueUnit;
 }
 
+impl ops::Mul<ValueUnit> for ValueUnit {
+    fn mul(self, other: ValueUnit) -> ValueUnit {
+        let mut res_units: HashMap<String, i8> = self.units.clone();
+        for (key, value) in other.units.clone() {
+            if let Some(existing_value) = res_units.get_mut(&key) {
+                *existing_value += value;
+            } else {
+                res_units.insert(key.to_string(), value);
+            }
+        }
+        res_units.retain(|_, v| *v != 0);
+        return ValueUnit { value: self.value * other.value, units: res_units }
+    }
+
+    type Output = ValueUnit;
+}
+
 impl ops::Div<f64> for &ValueUnit {
+    fn div(self, other: f64) -> ValueUnit {
+        return ValueUnit { value: self.value / other, units: self.units.clone() }
+    }
+
+    type Output = ValueUnit;
+}
+
+impl ops::Div<f64> for ValueUnit {
     fn div(self, other: f64) -> ValueUnit {
         return ValueUnit { value: self.value / other, units: self.units.clone() }
     }
@@ -83,6 +168,23 @@ impl ops::Div<f64> for &ValueUnit {
 
 impl ops::Div<&ValueUnit> for &ValueUnit {
     fn div(self, other: &ValueUnit) -> ValueUnit {
+        let mut res_units: HashMap<String, i8> = self.units.clone();
+        for (key, value) in other.units.clone() {
+            if let Some(existing_value) = res_units.get_mut(&key) {
+                *existing_value -= value;
+            } else {
+                res_units.insert(key.to_string(), -value);
+            }
+        }
+        res_units.retain(|_, v| *v != 0);
+        return ValueUnit { value: self.value / other.value, units: res_units }
+    }
+
+    type Output = ValueUnit;
+}
+
+impl ops::Div<ValueUnit> for ValueUnit {
+    fn div(self, other: ValueUnit) -> ValueUnit {
         let mut res_units: HashMap<String, i8> = self.units.clone();
         for (key, value) in other.units.clone() {
             if let Some(existing_value) = res_units.get_mut(&key) {
